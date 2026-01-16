@@ -7,6 +7,7 @@
 #include <iomanip>
 #include <future>
 #include <mutex>
+#include <algorithm>
 
 namespace fs = std::filesystem;
 
