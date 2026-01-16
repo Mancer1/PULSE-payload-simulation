@@ -4,109 +4,93 @@ from multiprocessing import Pool
 try:
     from tqdm import tqdm
 except ImportError:
-    print("tqdm not found. Install it using 'pip install tqdm' for a progress bar.")
     tqdm = None
 
 def replace_parameter(content, param, new_value):
+    """
+    Replaces a parameter only if the key matches exactly.
+    Prevents 'orientation' from matching 'orientation_mode'.
+    """
     lines = content.splitlines()
     for i, line in enumerate(lines):
-        if line.strip().startswith(param):
-            lines[i] = f"{param} = {new_value}"
-            return "\n".join(lines)
+        # Split by the first '=' found
+        if '=' in line:
+            key, value = line.split('=', 1)
+            if key.strip() == param:
+                lines[i] = f"{param} = {new_value}"
+                return "\n".join(lines)
     return content
 
-def read_file_content(filename):
-    try:
-        with open(filename, 'r') as f:
-            return f.read()
-    except FileNotFoundError:
-        print(f"Error: Cannot open file {filename}!")
-        exit(1)
-
 def run_simulation(task):
-    """
-    Function executed by worker processes.
-    Returns a status message upon completion.
-    """
-    main_conf = task['main_conf']
-    det_conf = task['det_conf']
-    run_id = task['run_id']
-
+    """Executes the Allpix2 simulation via Docker."""
     command = [
         "docker", "run", "--rm",
         "-w", "/pulse_simulation",
         "-v", f"{os.getcwd()}:/pulse_simulation",
         "apsq:g4-11.3.2-root-6.32",
-        "allpix", "-c", f"/pulse_simulation/{main_conf}", 
-        "-d", f"/pulse_simulation/{det_conf}"
+        "allpix", "-c", f"/pulse_simulation/{task['main_conf']}", 
+        "-d", f"/pulse_simulation/{task['det_conf']}"
     ]
-
-    # capture_output=True keeps the terminal clean during parallel execution
     result = subprocess.run(command, capture_output=True, text=True)
-    
-    if result.returncode != 0:
-        return f"Failure in Run {run_id} ({main_conf})"
-    return f"Success: Run {run_id}"
+    return (task['run_id'], result.returncode, result.stderr)
 
 def main():
     os.makedirs("output_auto", exist_ok=True)
+    
+    # Load templates
+    config_content = open("spacepix3_main.conf", 'r').read()
+    detector_content = open("spacepix3_detector.conf", 'r').read()
 
-    template_file = "spacepix3_main.conf"
-    detector_file = "spacepix3_detector.conf"
-
-    config_content = read_file_content(template_file)
-    detector_content = read_file_content(detector_file)
-
-    # Simulation matrix
-    energies = [round(5.0 + i * 0.1, 2) for i in range(int((10.0 - 5.0) / 0.1) + 1)]
+    # Parameters
+    energies = [round(5.0 + i * 0.1, 2) for i in range(51)] # 5.0 to 10.0
     particle_types = ["proton", "e-"]
     orientations = ["0deg 0deg 0deg", "15deg 0deg 0deg", "0deg 15deg 0deg"]
 
     tasks = []
     run_counter = 0
 
-    # 1. Preparation: Create configs
     for energy in energies:
         for ptype in particle_types:
             for orientation in orientations:
-                energy_str = str(energy).replace('.', '_')
-                orient_clean = orientation.replace(' ', '_')
+                # Format strings for filenames
+                e_str = str(energy).replace('.', '_')
+                o_clean = orientation.replace(' ', '_')
                 
-                det_name = f"detector_auto_{energy_str}_{ptype}_{orient_clean}.conf"
-                main_name = f"main_auto_{energy_str}_{ptype}_{orient_clean}.conf"
-                output_file = f"/pulse_simulation/output_auto/data_auto_{energy_str}_{ptype}_{orient_clean}.root"
+                det_name = f"detector_auto_{e_str}_{ptype}_{o_clean}.conf"
+                main_name = f"main_auto_{e_str}_{ptype}_{o_clean}.conf"
+                output_path = f"/pulse_simulation/output_auto/data_auto_{e_str}_{ptype}_{o_clean}.root"
 
-                run_main = replace_parameter(config_content, "file_name", f'"{output_file}"')
-                run_main = replace_parameter(run_main, "source_energy", f"{energy}GeV")
-                run_main = replace_parameter(run_main, "particle_type", f'"{ptype}"')
+                # 1. Modify Detector Config
                 run_det = replace_parameter(detector_content, "orientation", orientation)
 
+                # 2. Modify Main Config
+                run_main = replace_parameter(config_content, "file_name", f'"{output_path}"')
+                run_main = replace_parameter(run_main, "source_energy", f"{energy}GeV")
+                run_main = replace_parameter(run_main, "particle_type", f'"{ptype}"')
+                run_main = replace_parameter(run_main, "detectors_file", f'"{det_name}"')
+
+                # Write files
                 with open(det_name, 'w') as f: f.write(run_det)
                 with open(main_name, 'w') as f: f.write(run_main)
 
                 tasks.append({'main_conf': main_name, 'det_conf': det_name, 'run_id': run_counter})
                 run_counter += 1
 
-    # 2. Execution: Parallel Pool with TQDM
-    print(f"Launching {len(tasks)} simulations...")
-    
-    results = []
+    # Parallel Execution
+    print(f"Starting {len(tasks)} simulations...")
     with Pool() as pool:
-        # Use imap or imap_unordered to work with tqdm
         if tqdm:
-            # Wrap the iterator with tqdm for the progress bar
-            for result in tqdm(pool.imap_unordered(run_simulation, tasks), total=len(tasks), desc="Simulating"):
-                results.append(result)
+            results = list(tqdm(pool.imap_unordered(run_simulation, tasks), total=len(tasks)))
         else:
             results = pool.map(run_simulation, tasks)
 
-    # 3. Final Summary
-    failures = [res for res in results if "Failure" in res]
-    print(f"\n--- Processing Complete ---")
-    print(f"Total runs: {len(results)}")
-    print(f"Failures: {len(failures)}")
-    for fail in failures:
-        print(fail)
+    # Error Reporting
+    failures = [r for r in results if r[1] != 0]
+    if failures:
+        print(f"\nCompleted with {len(failures)} failures.")
+        for f in failures: print(f"Run {f[0]} error: {f[2][:100]}...")
+    else:
+        print("\nAll simulations completed successfully!")
 
 if __name__ == "__main__":
     main()
