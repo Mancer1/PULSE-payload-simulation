@@ -1,131 +1,131 @@
-//
-// Created by Chiara Molteni on 09/01/26.
-//
-
 #include <iostream>
 #include <fstream>
 #include <string>
-#include <cstdlib>
-#include <sstream>
 #include <vector>
-#include <algorithm>
+#include <filesystem>
+#include <sstream>
+#include <iomanip>
+#include <future>
+#include <mutex>
 
-// Function to assign a new value to a parameter
-void replaceParameter(std::string &content, const std::string &param, const std::string &newValue) {
-    size_t pos = content.find(param);
-    if (pos != std::string::npos) {
-        size_t endLine = content.find("\n", pos); // find end of the line
-        content.replace(pos, endLine - pos, param + " = " + newValue);
+namespace fs = std::filesystem;
+
+// Structure to hold task data
+struct Task {
+    std::string main_conf;
+    std::string det_conf;
+    int run_id;
+};
+
+// Thread-safe progress logging
+std::mutex cout_mutex;
+
+// Function to replace parameters in config files
+std::string replace_parameter(const std::string& content, const std::string& param, const std::string& new_value) {
+    std::stringstream ss(content);
+    std::string line;
+    std::string result;
+    bool replaced = false;
+
+    while (std::getline(ss, line)) {
+        size_t eq_pos = line.find('=');
+        if (!replaced && eq_pos != std::string::npos) {
+            std::string key = line.substr(0, eq_pos);
+            // Simple trim
+            key.erase(key.find_last_not_of(" \t") + 1);
+            key.erase(0, key.find_first_not_of(" \t"));
+
+            if (key == param) {
+                result += param + " = " + new_value + "\n";
+                replaced = true;
+                continue;
+            }
+        }
+        result += line + "\n";
     }
+    return result;
 }
 
-// Function to read file content
-std::string readFileContent(const std::string& filename) {
-    std::ifstream file(filename);
-    if (!file) {
-        std::cerr << "Cannot open file: " << filename << "!\n";
-        exit(1);
+// Function to run the Docker command
+void run_simulation(Task task) {
+    std::string current_dir = fs::current_path().string();
+    
+    // Constructing the docker command
+    std::string command = "docker run --rm -w /pulse_simulation "
+                          "-v \"" + current_dir + ":/pulse_simulation\" "
+                          "apsq:g4-11.3.2-root-6.32 allpix -c /pulse_simulation/" + task.main_conf;
+
+    int return_code = std::system(command.c_str());
+
+    std::lock_guard<std::mutex> lock(cout_mutex);
+    if (return_code != 0) {
+        std::cerr << "Run " << task.run_id << " failed with code " << return_code << std::endl;
+    } else {
+        std::cout << "Run " << task.run_id << " completed." << std::endl;
     }
-    std::stringstream buffer;
-    buffer << file.rdbuf();
-    file.close();
-    return buffer.str();
 }
 
 int main() {
+    fs::create_directory("output_auto");
 
-    // Creates output folder
-    system("mkdir -p output_auto");
+    // Load templates
+    auto read_file = [](std::string path) {
+        std::ifstream f(path);
+        return std::string((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    };
 
-    // Name of the template configuration file (main)
-    std::string templateFile = "spacepix3_main.conf";
+    std::string config_content = read_file("spacepix3_main.conf");
+    std::string detector_content = read_file("spacepix3_detector.conf");
 
-    std::string detectorFile = "spacepix3_detector.conf";
-
-    // Read the template config file
-    std::string configContent = readFileContent(templateFile);
-    std::string detectorContent = readFileContent(detectorFile);
-
-    // Energy simulation parameters
-    const double ENERGY_START = 5.0;
-    const double ENERGY_END = 10.0;
-    const double ENERGY_STEP = 0.1;
-
-    // Energies to simulate (in GeV)
-    std::vector<double> energies;
-    for (double e = ENERGY_START; e <= ENERGY_END; e += ENERGY_STEP) {
-        energies.push_back(e);
-    }
-
-    // Particle types to simulate
-    std::vector<std::string> particleTypes = {"proton", "e-"};
-
-    // Orientations to simulate
+    std::vector<std::string> p_types = {"proton", "e-"};
     std::vector<std::string> orientations = {"0deg 0deg 0deg", "15deg 0deg 0deg", "0deg 15deg 0deg"};
+    std::vector<Task> tasks;
 
-    int runNumber = 0;
+    int run_counter = 0;
 
-    // Loop over energies
-    for (double energy : energies) {
+    // Generate tasks and files
+    for (int i = 0; i <= 50; ++i) {
+        double energy = 5.0 + i * 0.1;
+        std::stringstream e_ss;
+        e_ss << std::fixed << std::setprecision(1) << energy;
+        std::string e_str = e_ss.str();
+        std::string e_file_str = e_str;
+        std::replace(e_file_str.begin(), e_file_str.end(), '.', '_');
 
-        // Loop over particle types
-        for (const std::string &ptype : particleTypes) {
+        for (const auto& ptype : p_types) {
+            for (const auto& orient : orientations) {
+                std::string o_clean = orient;
+                std::replace(o_clean.begin(), o_clean.end(), ' ', '_');
 
-            // Loop over orientations
-            for (const std::string &orientation : orientations) {
+                std::string det_name = "detector_auto_" + e_file_str + "_" + ptype + "_" + o_clean + ".conf";
+                std::string main_name = "main_auto_" + e_file_str + "_" + ptype + "_" + o_clean + ".conf";
+                std::string out_path = "/pulse_simulation/output_auto/data_auto_" + e_file_str + "_" + ptype + "_" + o_clean + ".root";
 
-                // Make a copy of main file
-                std::string runContent = configContent;
+                // Modify strings
+                std::string run_det = replace_parameter(detector_content, "orientation", orient);
+                std::string run_main = replace_parameter(config_content, "file_name", "\"" + out_path + "\"");
+                run_main = replace_parameter(run_main, "source_energy", e_str + "GeV");
+                run_main = replace_parameter(run_main, "particle_type", "\"" + ptype + "\"");
+                run_main = replace_parameter(run_main, "detectors_file", "\"" + det_name + "\"");
 
-                // Make a copy of detector file
-                std::string runDetectorContent = detectorContent;
-                
-                // Generate a unique output file name for each run
-                std::string energy_str = std::to_string(energy);
-                std::replace(energy_str.begin(), energy_str.end(), '.', '_');
-                std::string orientation_clean = orientation;
-                std::replace(orientation_clean.begin(), orientation_clean.end(), ' ', '_');
-                std::string outputFile = "/pulse_simulation/output_auto/data_auto_" + energy_str + "_" + ptype + "_" + orientation_clean + ".root";
-                replaceParameter(runContent, "file_name", "\"" + outputFile + "\"");
-            
-                // Replace the parameters for this run
-                replaceParameter(runContent, "source_energy", std::to_string(energy) + "GeV");
-                replaceParameter(runContent, "particle_type", "\"" + ptype + "\"");
-                replaceParameter(runDetectorContent, "orientation", orientation);
-                
-                // Write the modified detector config to a new file
-                std::string detectorConf = "detector_auto_" + energy_str + "_" + ptype + "_" + orientation_clean + ".conf";
-                std::ofstream outDet(detectorConf);
-                outDet << runDetectorContent;
-                outDet.close();
+                // Write files
+                std::ofstream(det_name) << run_det;
+                std::ofstream(main_name) << run_main;
 
-                // Write the modified main config to a new file
-                std::string runConf = "main_auto_" + energy_str + "_" + ptype + "_" + orientation_clean + ".conf";
-                std::ofstream out(runConf);
-                out << runContent;
-                out.close();
-
-                // Build the Docker command to run Allpix²
-                std::string command =
-                "docker run -it --rm "
-                "-w /pulse_simulation "
-                "-v $(pwd):/pulse_simulation "
-                "apsq:g4-11.3.2-root-6.32 "
-                "allpix -c /pulse_simulation/" + runConf + " -d /pulse_simulation/" + detectorConf;
-
-                // Print the command to console
-                std::cout << "Running: " << command << std::endl;
-
-                // Execute the command
-                int ret = system(command.c_str());
-                if (ret != 0) {
-                    std::cerr << "Simulation failed for run " << runNumber << std::endl;
-                }
-
-                runNumber++;
+                tasks.push_back({main_name, det_name, run_counter++});
             }
         }
     }
 
+    // Parallel execution using std::async (simple thread pool alternative)
+    std::cout << "Starting " << tasks.size() << " simulations..." << std::endl;
+    std::vector<std::future<void>> futures;
+    for (const auto& task : tasks) {
+        futures.push_back(std::async(std::launch::async, run_simulation, task));
+    }
+
+    for (auto& f : futures) f.get();
+
+    std::cout << "All simulations processed." << std::endl;
     return 0;
 }
