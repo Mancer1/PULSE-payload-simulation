@@ -1,0 +1,126 @@
+# mixed_sources_fuzzybeam_wide_plus45.mac
+# Base weights (per your requirement):
+#   e-     : 15
+#   proton : 3
+#   gamma  : 1
+#   alpha  : 1
+#
+# This file includes TWO sets:
+#  - Set A: straight (along +z)
+#  - Set B: same particles but tilted 45 degrees in x-z plane
+#
+# Fuzzy beam: beam2d with sigma_r = 0.05 rad, spot radius = 5 mm
+
+# -------------------------
+# Set A (straight, +z)
+# -------------------------
+
+# A0: e- (weight 15)
+/gps/particle e-
+/gps/source/intensity 15
+/gps/pos/type Plane
+/gps/pos/shape Circle
+/gps/pos/radius 5 mm
+/gps/pos/centre 0 0 -20 mm
+/gps/ene/mono 5 GeV
+/gps/ang/type beam2d
+/gps/direction 0 0 1
+/gps/ang/sigma_r 0.05
+
+# A1: proton (weight 3)
+/gps/source/add 1
+/gps/particle proton
+/gps/source/intensity 3
+/gps/pos/type Plane
+/gps/pos/shape Circle
+/gps/pos/radius 5 mm
+/gps/pos/centre 0 0 -20 mm
+/gps/ene/mono 120 GeV
+/gps/ang/type beam2d
+/gps/direction 0 0 1
+/gps/ang/sigma_r 0.05
+
+# A2: gamma (weight 1)
+/gps/source/add 1
+/gps/particle gamma
+/gps/source/intensity 1
+/gps/pos/type Plane
+/gps/pos/shape Circle
+/gps/pos/radius 5 mm
+/gps/pos/centre 0 0 -20 mm
+/gps/ene/mono 662 keV
+/gps/ang/type beam2d
+/gps/direction 0 0 1
+/gps/ang/sigma_r 0.05
+
+# A3: alpha (weight 1)
+/gps/source/add 1
+/gps/particle alpha
+/gps/source/intensity 1
+/gps/pos/type Plane
+/gps/pos/shape Circle
+/gps/pos/radius 5 mm
+/gps/pos/centre 0 0 -20 mm
+/gps/ene/mono 5 MeV
+/gps/ang/type beam2d
+/gps/direction 0 0 1
+/gps/ang/sigma_r 0.05
+
+
+# -------------------------
+# Set B (tilted 45 degrees in x-z plane)
+# Direction = (sin45, 0, cos45) = (0.70710678, 0, 0.70710678)
+# -------------------------
+
+# B0: e- (weight 15)
+/gps/source/add 1
+/gps/particle e-
+/gps/source/intensity 15
+/gps/pos/type Plane
+/gps/pos/shape Circle
+/gps/pos/radius 5 mm
+/gps/pos/centre 0 0 -5 mm
+/gps/ene/mono 5 GeV
+/gps/ang/type beam2d
+/gps/direction 0.70710678 0 0.70710678
+/gps/ang/sigma_r 0.05
+
+# B1: proton (weight 3)
+/gps/source/add 1
+/gps/particle proton
+/gps/source/intensity 3
+/gps/pos/type Plane
+/gps/pos/shape Circle
+/gps/pos/radius 5 mm
+/gps/pos/centre 0 0 -5 mm
+/gps/ene/mono 120 GeV
+/gps/ang/type beam2d
+/gps/direction 0.70710678 0 0.70710678
+/gps/ang/sigma_r 0.05
+
+# B2: gamma (weight 1)
+/gps/source/add 1
+/gps/particle gamma
+/gps/source/intensity 1
+/gps/pos/type Plane
+/gps/pos/shape Circle
+/gps/pos/radius 5 mm
+/gps/pos/centre 0 0 -5 mm
+/gps/ene/mono 662 keV
+/gps/ang/type beam2d
+/gps/direction 0.70710678 0 0.70710678
+/gps/ang/sigma_r 0.05
+
+# B3: alpha (weight 1)
+/gps/source/add 1
+/gps/particle alpha
+/gps/source/intensity 1
+/gps/pos/type Plane
+/gps/pos/shape Circle
+/gps/pos/radius 5 mm
+/gps/pos/centre 0 0 -5 mm
+/gps/ene/mono 5 MeV
+/gps/ang/type beam2d
+/gps/direction 0.70710678 0 0.70710678
+/gps/ang/sigma_r 0.05
+
