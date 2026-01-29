@@ -4,6 +4,6 @@ This is the payload simulation team of the PULSE Project. Our goal is to simulat
 
 ## Tools used:
 
-Allpix
-Docker
-VcXsrv (for Windows)
+- Allpix
+- Docker
+- VcXsrv (for Windows)
