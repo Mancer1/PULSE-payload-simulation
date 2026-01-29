@@ -46,7 +46,7 @@ To use VcXsrv while using root, run the command
   bash
 </pre>
 
-Replace <code style="color:orange">HOST_IP</code> with your HOST IPv4 address which can be found using <code style="color:red">ipconfig</code> in command prompt.
+Replace <code style="color:orange">HOST_IP</code> with your HOST IPv4 address which can be found using <code style="color:red">**ipconfig**</code> in command prompt.
 
 Otherwise, run root without VcXsrv
 <pre>
