@@ -31,9 +31,9 @@ For visualization tool for root in Windows, install VcXsrv https://sourceforge.n
 # How to start
 
 If VcXsrv is being turned on, then the settings are 
-- Select display settings as <span style="color:orange">Multiple windows</span>
-- Select how start to client as <span style="color:orange">no client</span>
-- Extra settings, tick all boxes especially <span style="color:orange">Disable access control </span>  
+- Select display settings as <code style="color:orange">**Multiple windows**</code>
+- Select how start to client as <code style="color:orange">**no client**</code>
+- Extra settings, tick all boxes especially <code style="color:orange">**Disable access control**</code>  
 
 
 To use VcXsrv while using root, run the command 
@@ -41,12 +41,12 @@ To use VcXsrv while using root, run the command
 <pre>
  docker run --rm -it \
   -v "$(pwd)":/data \
-  -e DISPLAY="<span style="color:orange">HOST_IP</span>:0.0" \
+  -e DISPLAY="<code style="color:orange">HOST_IP</code>:0.0" \
   apsq:g4-11.3.2-root-6.32 \
   bash
 </pre>
 
-Replace <span style="color:orange">HOST_IP</span> with your HOST IPv4 address which can be found using <span style="color:red">ipconfig</span> in command prompt.
+Replace <code style="color:orange">HOST_IP</code> with your HOST IPv4 address which can be found using <code style="color:red">ipconfig</code> in command prompt.
 
 Otherwise, run root without VcXsrv
 <pre>
