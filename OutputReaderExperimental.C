@@ -30,7 +30,7 @@
 #endif
 
 
-void read_pixelCharge(const char rootfilePath)
+void read_pixelCharge(const char *rootfilePath)
 {
 	// 1. Assign TFile object to root file that holds the data
 	TFile *rootfile = new TFile(rootfilePath, "read");
@@ -50,7 +50,7 @@ void read_pixelCharge(const char rootfilePath)
 		pixelChargeTree->GetEntry(eventIdx);
 		std::array<std::array<long, 64>, 64> pixelChargeMatrix{};
 		
-		for (int i = 0; i < pixelChargeVector->size(); i++) {
+		for (long unsigned int i = 0; i < pixelChargeVector->size(); i++) {
 			
 			allpix::PixelCharge *pixelCharge = pixelChargeVector->at(i);
 			int pixel_x = pixelCharge->getPixel().getIndex().x();
