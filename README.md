@@ -1,6 +1,6 @@
 # PULSE-payload-simulation
 
-This is the payload simulation team of the PULSE Project. Our goal is to simulate real time scenario of a Spacepix3 model while in orbit and classify the particles that are hitting the sensor.
+This is the payload simulation team of the PULSE Project. Our goal is to simulate real time scenario of a Spacepix3 sensor while in orbit using Allpix and classify the particles that are hitting the sensor.
 
 ## Tools used:
 
