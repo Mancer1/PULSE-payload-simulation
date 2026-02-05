@@ -205,7 +205,7 @@ int main() {
 	
     /* -------- Cleanup temp folders -------- */
     fs::remove_all(temp_dir);
-    //fs::remove_all("output/temp_output");
+    fs::remove_all("output/temp_output");
 
     std::cout << "All simulations processed. All temp folders deleted.\n";
     return 0;
