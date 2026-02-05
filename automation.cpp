@@ -58,10 +58,12 @@ void run_simulation(const Task& task,
     fs::path project_root = fs::current_path();
 
     std::string command =
-        "docker run -it --rm -w /project "
-        "-v \"" + project_root.string() + ":/project\" "
-        "apsq:g4-11.3.2-root-6.32 "
-        "allpix -c /project/temp_configs/" + task.main_conf_file;
+    "docker run -it --rm "
+    "--user $(id -u):$(id -g) "
+    "-w /project "
+    "-v \"" + project_root.string() + ":/project\" "
+    "apsq:g4-11.3.2-root-6.32 "
+    "allpix -c /project/temp_configs/" + task.main_conf_file;
 
     int return_code = std::system(command.c_str());
 
@@ -72,6 +74,9 @@ void run_simulation(const Task& task,
         std::cout << "Run " << task.run_id << " completed\n";
     }
 }
+
+
+
 
 /* ---------------- Main ---------------- */
 
@@ -169,10 +174,38 @@ int main() {
 
     for (auto& f : futures)
         f.get();
+	
+	
+	// write root outputs to shared .root file with flattened tree
+	// flattened tree can then be easily read with pythons uproot 
+	fs::path project_root = fs::current_path();
+	fs::path temp_output_dir = "/project/output/temp_output";
+	std::string output_reading_command =
+    "docker run --rm "
+    "--user $(id -u):$(id -g) "
+    "-w /project "
+    "-v \"" + project_root.string() + ":/project\" "
+    "apsq:g4-11.3.2-root-6.32 "
+    "root -l -b -q "
+    "-e '.L /opt/allpix/lib/libAllpixObjects.so' "
+    "-e '.L OutputReader3.C++' "
+    "-e 'treeMerge(\"" + temp_output_dir.string() + "\")'";
 
+    
+    int return_code = std::system(output_reading_command.c_str());
+
+    std::lock_guard<std::mutex> lock(cout_mutex);
+    if (return_code != 0) {
+        std::cerr << "Output reading failed.\n";
+    } else {
+        std::cout << "Output reading succeeded.\n";
+    }
+	
+	
+	
     /* -------- Cleanup temp folders -------- */
     fs::remove_all(temp_dir);
-    fs::remove_all("output/temp_output");
+    //fs::remove_all("output/temp_output");
 
     std::cout << "All simulations processed. All temp folders deleted.\n";
     return 0;
