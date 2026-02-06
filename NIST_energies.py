@@ -6,6 +6,7 @@
 
 import numpy as np
 import pandas as pd
+import uproot
 from star import electron
 from star import ProtonSTARCalculator, ProtonMaterials
 from star import AlphaSTARCalculator, AlphaMaterials
@@ -83,3 +84,20 @@ df_a = pd.DataFrame({
 })
 df_a.to_csv("ionosphere_alpha_stopping.csv", index=False)
 
+#---------------------------------------- ADD SIMULATION DATA --------------------------------------------#
+
+# Path to your ROOT file
+root_file = "MergedOutput.root"
+
+# Name of the TTree inside the ROOT
+tree_name = "pixelcharge_flattened"
+
+# Open the ROOT file and get the tree
+with uproot.open(root_file) as file:
+    tree = file[tree_name]
+
+    # Read the entire tree as a pandas DataFrame
+    df = tree.arrays(library='pd')
+
+#Now df is a pandas DataFrame with the tree contents
+print(df.head())
