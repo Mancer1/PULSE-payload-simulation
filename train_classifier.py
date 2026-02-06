@@ -1,36 +1,37 @@
-import os
-import glob
+import uproot
 import pandas as pd
 import numpy as np
 import xgboost as xgb
+import pickle
+import os
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 from sklearn.preprocessing import LabelEncoder
 
-def run_ml_pipeline(data_folder):
-    print(f"Scanning for HDF5 files in: {data_folder}")
-    all_files = glob.glob(os.path.join(data_folder, "*.h5"))
+def run_ml_pipeline_root(root_file, tree_name):
+    # --- 1. DATA LOADING ---
+    print(f"Opening ROOT file: {root_file}")
     
-    if not all_files:
-        print("No HDF5 files found! Check your path.")
-        return
+    if not os.path.exists(root_file):
+        print(f"Error: File {root_file} not found.")
+        return None, None
 
-    data_list = []
-    for file in all_files:
-        # Note: 'key' must match the internal name used when saving the H5
-        df = pd.read_hdf(file, key='simulation_results')
-        data_list.append(df)
+    with uproot.open(root_file) as file:
+        if tree_name not in file:
+            print(f"Error: Tree {tree_name} not found in {root_file}")
+            return None, None
+            
+        tree = file[tree_name]
+        columns = ["pixel_x", "pixel_y", "charge", "Incident_particle_type"]
+        df = tree.arrays(columns, library="pd")
     
-    full_df = pd.concat(data_list, ignore_index=True)
-    print(f"Loaded {len(full_df)} total rows from {len(all_files)} files.")
+    print(f"Loaded {len(df)} pixel hits.")
 
     # --- 2. PREPROCESSING ---
-    # Assume 'target' is your label (e.g., 'proton', 'e-')
-    # and all other columns are simulation features
-    X = full_df.drop('target', axis=1)
-    y_raw = full_df['target']
+    features = ["pixel_x", "pixel_y", "charge"]
+    X = df[features].to_numpy().astype(float)
+    y_raw = df["Incident_particle_type"].to_numpy().astype(str)
 
-    # XGBoost requires numbers, so we convert text labels (proton/e-) to 0, 1, 2...
     label_encoder = LabelEncoder()
     y = label_encoder.fit_transform(y_raw)
     class_names = label_encoder.classes_
@@ -38,7 +39,9 @@ def run_ml_pipeline(data_folder):
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
     # --- 3. TRAINING ---
-    print("\nTraining the XGBoost model...")
+    print(f"\nTraining XGBoost on {len(X_train)} samples...")
+    print(f"Target classes: {class_names}")
+    
     model = xgb.XGBClassifier(
         n_estimators=100,
         max_depth=6,
@@ -50,33 +53,34 @@ def run_ml_pipeline(data_folder):
     
     model.fit(X_train, y_train)
 
-    # --- 4. TESTING & EVALUATION ---
-    print("\n--- TEST RESULTS ---")
-    predictions = model.predict(X_test)
+    # --- 4. EVALUATION ---
+    # Fix for "inconsistent numbers of samples" [146, 292]
+    raw_preds = model.predict(X_test)
+    if len(raw_preds.shape) > 1 and raw_preds.shape[1] > 1:
+        predictions = np.argmax(raw_preds, axis=1)
+    else:
+        predictions = raw_preds.astype(int).flatten()
     
-    # Global Accuracy
+    print("\n--- TEST RESULTS ---")
     acc = accuracy_score(y_test, predictions)
-    errors = (y_test != predictions).sum()
     print(f"Overall Accuracy: {acc * 100:.2f}%")
-    print(f"Total Incorrect Predictions: {errors} / {len(y_test)}")
-
-    # Detailed Precision/Recall per particle type
+    
     print("\nDetailed Classification Report:")
     print(classification_report(y_test, predictions, target_names=class_names))
 
-    # Confusion Matrix
-    print("Confusion Matrix (Rows=Truth, Columns=Predicted):")
-    cm = confusion_matrix(y_test, predictions)
-    print(cm)
-
-    # Percentage-based Confusion Matrix for clarity
-    cm_perc = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
-    print("\nConfusion Matrix (Normalized Percentages):")
-    print(pd.DataFrame(cm_perc, index=class_names, columns=class_names).round(2))
-
-    return model
+    # --- 5. SAVING OUTPUTS ---
+    model_name = "particle_classifier.json"
+    model.save_model(model_name)
+    
+    encoder_name = "label_encoder.pkl"
+    with open(encoder_name, "wb") as f:
+        pickle.dump(label_encoder, f)
+        
+    print(f"\nSUCCESS: Model saved as '{model_name}' and Encoder as '{encoder_name}'")
+    
+    return model, label_encoder
 
 if __name__ == "__main__":
-    # Change this to your actual folder path
-    folder_path = "./sim_data_hdf5" 
-    trained_model = run_ml_pipeline(folder_path)
+    FILE_PATH = "MergedOutput.root"
+    TREE_PATH = "pixelcharge_flattened"
+    trained_model, encoder = run_ml_pipeline_root(FILE_PATH, TREE_PATH)
