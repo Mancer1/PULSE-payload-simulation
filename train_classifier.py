@@ -4,83 +4,91 @@ import numpy as np
 import xgboost as xgb
 import pickle
 import os
+from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 from sklearn.preprocessing import LabelEncoder
+from sklearn.multioutput import MultiOutputClassifier
 
 def run_ml_pipeline_root(root_file, tree_name):
-    # --- 1. DATA LOADING ---
+    # --- DATA LOADING ---
     print(f"Opening ROOT file: {root_file}")
-    
-    if not os.path.exists(root_file):
-        print(f"Error: File {root_file} not found.")
-        return None, None
-
     with uproot.open(root_file) as file:
-        if tree_name not in file:
-            print(f"Error: Tree {tree_name} not found in {root_file}")
-            return None, None
-            
         tree = file[tree_name]
-        columns = ["pixel_x", "pixel_y", "charge", "Incident_particle_type"]
+        columns = ["event_idx", "pixel_x", "pixel_y", "charge", 
+                   "Incident_particle_type", "Incident_particle_energy"]
         df = tree.arrays(columns, library="pd")
     
-    print(f"Loaded {len(df)} pixel hits.")
+    print(f"Loaded {len(df)} raw pixel hits.")
 
-    # --- 2. PREPROCESSING ---
-    features = ["pixel_x", "pixel_y", "charge"]
-    X = df[features].to_numpy().astype(float)
-    y_raw = df["Incident_particle_type"].to_numpy().astype(str)
+    print("Grouping hits into events...")
+    
+    # Define how to squash pixel hits into one event summary
+    agg_logic = {
+        'charge': ['sum', 'mean', 'count', 'std'], # Total energy, Avg, Cluster Size, Spread
+        'pixel_x': ['min', 'max', 'std'],
+        'pixel_y': ['min', 'max', 'std'],
+        'Incident_particle_type': 'first',
+        'Incident_particle_energy': 'first'
+    }
+    
+    event_df = df.groupby('event_idx').agg(agg_logic)
+    
+    event_df.columns = [f"{col[0]}_{col[1]}" for col in event_df.columns]
+    
+    # Fill NaN std values (happens if an event has only 1 pixel)
+    event_df = event_df.fillna(0)
 
-    label_encoder = LabelEncoder()
-    y = label_encoder.fit_transform(y_raw)
-    class_names = label_encoder.classes_
+    # Physics Feature Engineering: Cluster Dimensions
+    event_df['cluster_width'] = event_df['pixel_x_max'] - event_df['pixel_x_min']
+    event_df['cluster_height'] = event_df['pixel_y_max'] - event_df['pixel_y_min']
+    
+    print(f"Aggregated into {len(event_df)} unique particle events.")
 
+    # --- PREPROCESSING ---
+    features = ['charge_sum', 'charge_mean', 'charge_count', 'charge_std', 
+                'cluster_width', 'cluster_height', 'pixel_x_std', 'pixel_y_std']
+    
+    X = event_df[features].to_numpy().astype(float)
+    
+    le_type = LabelEncoder()
+    le_energy = LabelEncoder()
+
+    y_type = le_type.fit_transform(event_df['Incident_particle_type_first'].astype(str))
+    y_energy = le_energy.fit_transform(event_df['Incident_particle_energy_first'].astype(str))
+
+    y = np.column_stack((y_type, y_energy))
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    # --- 3. TRAINING ---
-    print(f"\nTraining XGBoost on {len(X_train)} samples...")
-    print(f"Target classes: {class_names}")
+    # --- TRAINING ---
+    print(f"\nTraining Multi-Output XGBoost on Event Clusters...")
+    base_model = xgb.XGBClassifier(n_estimators=100, max_depth=4, learning_rate=0.1, random_state=42, base_score=0.5)
+    model = MultiOutputClassifier(base_model)
     
-    model = xgb.XGBClassifier(
-        n_estimators=100,
-        max_depth=6,
-        learning_rate=0.1,
-        objective='multi:softprob',
-        num_class=len(class_names),
-        random_state=42
-    )
-    
-    model.fit(X_train, y_train)
+    with tqdm(total=2, desc="Training") as pbar:
+        model.fit(X_train, y_train)
+        pbar.update(2)
 
-    # --- 4. EVALUATION ---
-    # Fix for "inconsistent numbers of samples" [146, 292]
-    raw_preds = model.predict(X_test)
-    if len(raw_preds.shape) > 1 and raw_preds.shape[1] > 1:
-        predictions = np.argmax(raw_preds, axis=1)
-    else:
-        predictions = raw_preds.astype(int).flatten()
-    
-    print("\n--- TEST RESULTS ---")
-    acc = accuracy_score(y_test, predictions)
-    print(f"Overall Accuracy: {acc * 100:.2f}%")
-    
-    print("\nDetailed Classification Report:")
-    print(classification_report(y_test, predictions, target_names=class_names))
+    # --- EVALUATION ---
+    predictions = model.predict(X_test)
+    y_test_type, y_test_energy = y_test[:, 0], y_test[:, 1]
+    pred_type, pred_energy = predictions[:, 0], predictions[:, 1]
 
-    # --- 5. SAVING OUTPUTS ---
-    model_name = "particle_classifier.json"
-    model.save_model(model_name)
+    print("\n--- EVENT-BASED TEST RESULTS ---")
+    print(f"Particle Type Accuracy: {accuracy_score(y_test_type, pred_type)*100:.2f}%")
+    print(f"Energy Accuracy: {accuracy_score(y_test_energy, pred_energy)*100:.2f}%")
     
-    encoder_name = "label_encoder.pkl"
-    with open(encoder_name, "wb") as f:
-        pickle.dump(label_encoder, f)
-        
-    print(f"\nSUCCESS: Model saved as '{model_name}' and Encoder as '{encoder_name}'")
-    
-    return model, label_encoder
+    print("\n[Particle Type Report]")
+    print(classification_report(y_test_type, pred_type, target_names=le_type.classes_))
+
+    # --- 6. SAVING ---
+    with open("event_model.pkl", "wb") as f:
+        pickle.dump(model, f)
+    with open("event_encoders.pkl", "wb") as f:
+        pickle.dump({'type': le_type, 'energy': le_energy}, f)
+    print(f"\nSUCCESS: Event-based model saved.")
 
 if __name__ == "__main__":
     FILE_PATH = "MergedOutput.root"
     TREE_PATH = "pixelcharge_flattened"
-    trained_model, encoder = run_ml_pipeline_root(FILE_PATH, TREE_PATH)
+    run_ml_pipeline_root(FILE_PATH, TREE_PATH)
