@@ -97,7 +97,6 @@ InitialParameters parseFilename(const std::string& filename)
 
     // Combine x and y into a float x.y
     std::string combinedXY = parts[2] + "." + parts[3];
-    std::cout << parts[0] << std::endl;
     float xy = std::stof(combinedXY);
 
     std::string particleType = parts[4];
@@ -105,7 +104,6 @@ InitialParameters parseFilename(const std::string& filename)
     float a_deg = parseDegree(parts[5]);
     float b_deg = parseDegree(parts[6]);
     float c_deg = parseDegree(parts[7]);
-	
 	InitialParameters parameters = {particleType, xy, a_deg, b_deg, c_deg};
     return parameters;
 	
@@ -117,9 +115,11 @@ void flattenPixelChargeTree(TTree* input_tree,
 				std::vector<InitialParameters>& initial_parameters)
 {
 	
+
 	// Link variable to input_tree entries
 	std::vector<allpix::PixelCharge*> *input_charges = nullptr;
 	input_tree->SetBranchAddress("spacepix3", &input_charges);
+
 	
 	// Initialize output tree branches
 	// Event nr.
@@ -149,6 +149,7 @@ void flattenPixelChargeTree(TTree* input_tree,
 	output_tree->Branch("Sensor_y_rotation", &y_rotation);
 	output_tree->Branch("Sensor_z_rotation", &z_rotation);
 	
+
 	// Loop over input tree entries, flatten the entries and write to output tree
 	
 	// Note: run_idx idx goes up by one when all the entries corresponding 
@@ -206,6 +207,7 @@ void treeMerge(const char *outDirectory)
 	std::vector<InitialParameters> input_parameters;
 	for (const auto& filepath : fs::directory_iterator(outPath)) 
 	{
+		
 		// check if rootfile is actually rootfile. If not, skip.
 		if (!filepath.is_regular_file()) continue;
 		if (!(filepath.path().extension() == ".root")) continue;
@@ -215,14 +217,18 @@ void treeMerge(const char *outDirectory)
 		
 		TFile *input_file = new TFile(filepath_str.c_str(), "READ");
 		TTree *pixel_charge_tree = (TTree*)input_file->Get("PixelCharge");
-		
+		if (pixel_charge_tree == nullptr) {
+			std::cout << "Error: Couldn't find PixelCharge TTree for " << filename << ". Will skip this file." << std::endl;
+			continue;
+		}
 		// Retrieve initial parameters from filename
 		InitialParameters parameters = parseFilename(filename);
+
 		int number_entries = pixel_charge_tree->GetEntries();
 		parameters.numberOfEntries = number_entries;
 		input_parameters.push_back(parameters);
 		
-		
+
 		vector<allpix::PixelCharge*> *pc_walker = nullptr;
 
 		pixel_charge_tree->SetBranchAddress("spacepix3", &pc_walker);
@@ -234,9 +240,13 @@ void treeMerge(const char *outDirectory)
 		tfiles.push_back(input_file);
 	
 	}
+	
 
+	std::cout << "Number of TTrees merged: " << treeList->GetSize() << std::endl;
 	TFile *output_file = new TFile("MergedOutput.root", "RECREATE");
 	TTree *mergedTree = TTree::MergeTrees(treeList);
+	
+
 
 	mergedTree->SetName("PixelCharge");
 	mergedTree->Write();
@@ -250,14 +260,10 @@ void treeMerge(const char *outDirectory)
 	auto output_tree = std::make_unique<TTree>("pixelcharge_flattened", 
 				"PixelCharge rows flattened with initial parameters");
 	flattenPixelChargeTree(mergedTree, output_tree.get(), input_parameters);
-	std::cout << "1" << std::endl;
 	output_tree->Write();
-	std::cout << "2" << std::endl;
 	
 	//delete treeList;
 	
-	std:: cout << "3" << std::endl;
-	std::cout << "4" <<std::endl;
 	
 }
 
