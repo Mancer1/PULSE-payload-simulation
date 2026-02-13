@@ -104,7 +104,7 @@ int main() {
 
     std::vector<std::string> p_types = {"proton", "e-"};
     std::vector<std::string> orientations = {
-        "0deg 0deg 0deg",
+         "0deg 0deg 0deg",
         "15deg 0deg 0deg",
         "0deg 15deg 0deg"
     };
@@ -114,15 +114,26 @@ int main() {
 
     /* -------- Generate tasks and temp config files -------- */
 
-    for (int i = 0; i <= 1; ++i) {
-        double energy = 5.0 + i * 0.1;
-        std::stringstream e_ss;
-        e_ss << std::fixed << std::setprecision(1) << energy;
-        std::string e_str = e_ss.str();
-        std::string e_file = e_str;
-        std::replace(e_file.begin(), e_file.end(), '.', '_');
+    
+    for (const auto& ptype : p_types) {
+        for (int i = 0; i <= 50; ++i) {
+            double energy;
+            if (ptype == "e-") { // Electron energies in MeV (1 keV - 1 MeV)
+                double start = 0.001;
+                double end = 1.0;
+                energy = start + i * (end - start) / 50.0;
+            } 
+            else if (ptype == "proton") { //Proton energies in MeV (10 keV - 10 MeV)
+                double start = 0.01;
+                double end = 10.0;
+                energy = start + i * (end - start) / 50.0;
+            }
+            std::stringstream e_ss;
+            e_ss << std::fixed << std::setprecision(4) << energy;
+            std::string e_str = e_ss.str();
+            std::string e_file = e_str;
+            std::replace(e_file.begin(), e_file.end(), '.', '_');
 
-        for (const auto& ptype : p_types) {
             for (const auto& orient : orientations) {
                 std::string o_clean = orient;
                 std::replace(o_clean.begin(), o_clean.end(), ' ', '_');
@@ -137,7 +148,7 @@ int main() {
                 // Replace parameters
                 std::string run_det = replace_parameter(detector_content, "orientation", orient);
                 std::string run_main = replace_parameter(config_content, "file_name", "\"" + out_path + "\"");
-                run_main = replace_parameter(run_main, "source_energy", e_str + "GeV");
+                run_main = replace_parameter(run_main, "source_energy", e_str + "MeV");
                 run_main = replace_parameter(run_main, "particle_type", "\"" + ptype + "\"");
                 run_main = replace_parameter(run_main, "detectors_file", "\"" + det_name + "\"");
 
