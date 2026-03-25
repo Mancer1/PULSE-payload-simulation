@@ -28,7 +28,7 @@ DOCKER_BUILDKIT=1 docker build \
 For visualization tool for root in Windows, install VcXsrv https://sourceforge.net/projects/vcxsrv/
 
 
-# How to start
+# How to run root
 
 If VcXsrv is being turned on, then the settings are 
 - Select display settings as <code style="color:orange">**Multiple windows**</code>
@@ -55,3 +55,6 @@ Otherwise, run root without VcXsrv
   apsq:g4-11.3.2-root-6.32 \
   bash
 </pre>
+
+
+# Simulation 
