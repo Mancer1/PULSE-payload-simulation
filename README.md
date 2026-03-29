@@ -1,17 +1,19 @@
 # PULSE-payload-simulation
 
-This is the payload simulation team of the PULSE Project. Our goal is to simulate real time scenario of a Spacepix3 sensor while in orbit using Allpix and classify the particles that are hitting the sensor.
+This document provides the steps required to run the simulation and the classification model developed by the Payload Simulation Team of the PULSE Project. Our goal is to simulate realistic in-orbit conditions for a Spacepix3 sensor using the Allpix Squared framework and to classify the particles interacting with the sensor.
 
-## Tools used:
+## Softwares used in this project:
 
-- Allpix
-- root 
+- Allpix Squared
+- ROOT
 - Docker
 - VcXsrv (for Windows)
+- XQuartz (for MacOS)
+- ParaView (for MacOS)
 
-# How to setup: 
-
-Install the custom Allpix Dockerfile by using the below command
+# How to setup (any OS)
+- Install Docker: https://www.docker.com/get-started/
+- Build the custom Allpix Docker image used in this project using the following command:
 
 <pre>
 DOCKER_BUILDKIT=1 docker build \
@@ -24,13 +26,16 @@ DOCKER_BUILDKIT=1 docker build \
   --build-arg MAKEFLAGS="-j$(nproc)" \
   . 
 </pre>
+ 
+- For visualization with ROOT on Windows, install VcXsrv: https://sourceforge.net/projects/vcxsrv/
+- For MacOS, install XQuartz: https://www.xquartz.org, and Paraview or another visualization sofware.
 
-For visualization tool for root in Windows, install VcXsrv https://sourceforge.net/projects/vcxsrv/
+# Configuration files
+Ensure that you have a folder containing the three configuration files Spacepix3_main.conf, Spacepix3_detector.conf, and Spacepix3_model.conf, along with all other files required for post-processing as provided in the Git repository.
 
+# How to activate a container (Windows)
 
-# How to run root
-
-If VcXsrv is being turned on, then the settings are 
+If VcXsrv is being turned on, use the following settings:
 - Select display settings as <code style="color:orange">**Multiple windows**</code>
 - Select how start to client as <code style="color:orange">**no client**</code>
 - Extra settings, tick all boxes especially <code style="color:orange">**Disable access control**</code>  
@@ -56,45 +61,53 @@ Otherwise, run dockerfile without VcXsrv using the below command
   bash
 </pre>
 
-After being in the dockerfile , run root by using 
-<pre>
-root
-</pre>
+# How to activate a container (MacOS)
+...
 
-To quit root, do <code>.q</code> or <code>CTRL + D </code>
+# How to run a simulation (any OS)
 
-# Simulation 
+To run a simple simulation, set a low number of events (e.g. 10) in spacepix3_main.conf before execution.
 
-To run a simple simulation, keep the event count low in spacepix3_main.conf like 10 before execution. 
-
-Whle being in the docker container and start simulation by
+After activating the container, run the simulation by typing:
 <pre>
 allpix -c spacepix3_main.conf
 </pre>
 
+Next, navigate to the directory containing the simulation output files (data.root and module.root) and start ROOT by typing the appropriate command. Allpix Squared automatically creates an output folder containing these files.
+<pre>
+root
+</pre>
 
-Then change the directory which contains the output of the simulation (which is data.root and moodule.root) and run root.
-
-The output contents can be viewed using TBrowser while being in root. Use VcXsrv for this case.
+While in ROOT, the output contents can be explored using TBrowser.
 <pre>
 new TBrowser
 </pre>
 
-# Automation 
-Since the automation automatically starts the dockerfile and root, run the below commands outside the docker container. 
+To quit root, do <code>.q</code> or <code>CTRL + D </code>
 
-To run the automation for testing against true values or data procurement for the classification model, compile 
+# Visualization
+...
+
+# Open output files and inspect a Tree
+...
+
+# Run the Automation script
+Since the automation script automatically launches the Docker container and ROOT, run the following commands outside the Docker container.
+
+Compile the source file automation.cpp into an executable using the following command. Here, "automation" is the name of the executable, but you can choose any name you like:
 
 <pre>
 g++ -std=c++17 automation.cpp -o automation -pthread
 </pre>
 
-and then run 
+Once the executable is created, run it using:
 
 <pre>
 ./automation
 </pre>
 
+# Data comparison
+...
 
 
 # Training
