@@ -129,7 +129,7 @@ int main() {
                 energy = start + i * (end - start) / 50.0;
             }
             std::stringstream e_ss;
-            e_ss << std::fixed << std::setprecision(4) << energy;
+            e_ss << std::fixed << std::setprecision(5) << energy;
             std::string e_str = e_ss.str();
             std::string e_file = e_str;
             std::replace(e_file.begin(), e_file.end(), '.', '_');
